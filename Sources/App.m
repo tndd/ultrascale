@@ -46,6 +46,8 @@ static int USExitCode = 0;
 @property(strong) USPreview *preview;
 @property(strong) NSButton *applyButton, *restoreButton, *keepButton;
 @property(strong) NSStatusItem *statusItem;
+@property(strong) NSMenu *iconMenu;
+@property(copy) NSString *iconName;
 @property(strong) NSTimer *timer;
 @property(copy) NSArray<USDisplay *> *displays;
 @property BOOL busy, pending, uiTest;
@@ -78,6 +80,8 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     self.engine = [USDisplayEngine new];
     self.uiTest = [NSProcessInfo.processInfo.arguments containsObject:@"--ui-test"];
     [self createMenu];
+    NSString *savedIcon = [NSUserDefaults.standardUserDefaults stringForKey:@"iconName"];
+    [self useIconNamed:self.uiTest ? @"IconBlue" : (savedIcon ?: @"IconBlue")];
     [self createWindow];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(displaysChanged:)
         name:NSApplicationDidChangeScreenParametersNotification object:nil];
@@ -92,6 +96,14 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     NSMenu *menu = [NSMenu new];
     NSMenuItem *app = [NSMenuItem new]; [menu addItem:app];
     app.submenu = [NSMenu new];
+    self.iconMenu = [NSMenu new];
+    NSMenuItem *iconChoice = [app.submenu addItemWithTitle:@"Dockアイコン" action:NULL keyEquivalent:@""];
+    iconChoice.submenu = self.iconMenu;
+    for (NSArray *choice in @[@[@"青（標準）", @"IconBlue"], @[@"緑（予備）", @"IconGreen"]]) {
+        NSMenuItem *item = [self.iconMenu addItemWithTitle:choice[0] action:@selector(changeIcon:) keyEquivalent:@""];
+        item.target = self; item.representedObject = choice[1];
+    }
+    [app.submenu addItem:NSMenuItem.separatorItem];
     [app.submenu addItemWithTitle:@"UltraScaleを終了" action:@selector(terminate:) keyEquivalent:@"q"];
     NSMenuItem *window = [NSMenuItem new]; [menu addItem:window];
     window.title = @"ウインドウ"; window.submenu = [NSMenu new];
@@ -109,6 +121,21 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     [status addItem:NSMenuItem.separatorItem];
     [status addItemWithTitle:@"終了して元の表示に戻す" action:@selector(terminate:) keyEquivalent:@"q"];
     self.statusItem.menu = status;
+}
+- (BOOL)useIconNamed:(NSString *)name {
+    if (![@[@"IconBlue", @"IconGreen"] containsObject:name]) name = @"IconBlue";
+    NSString *path = [NSBundle.mainBundle pathForResource:name ofType:@"icns"];
+    NSImage *icon = path ? [[NSImage alloc] initWithContentsOfFile:path] : nil;
+    if (!icon) return NO;
+    NSApp.applicationIconImage = icon;
+    self.iconName = name;
+    for (NSMenuItem *item in self.iconMenu.itemArray)
+        item.state = [item.representedObject isEqual:name] ? NSControlStateValueOn : NSControlStateValueOff;
+    return YES;
+}
+- (void)changeIcon:(NSMenuItem *)sender {
+    if ([self useIconNamed:sender.representedObject] && !self.uiTest)
+        [NSUserDefaults.standardUserDefaults setObject:self.iconName forKey:@"iconName"];
 }
 - (void)createWindow {
     self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 620, 650)
@@ -257,6 +284,12 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
 - (void)runUITest {
     // 通常のアプリと同じウインドウ・コントロールを動かす。画面設定は変更しない。
     BOOL pass = YES;
+    pass &= [self.iconName isEqual:@"IconBlue"];
+    [self.iconMenu performActionForItemAtIndex:1];
+    pass &= [self.iconName isEqual:@"IconGreen"] && [self.iconMenu itemAtIndex:1].state == NSControlStateValueOn;
+    [self.iconMenu performActionForItemAtIndex:0];
+    pass &= [self.iconName isEqual:@"IconBlue"] && [self.iconMenu itemAtIndex:0].state == NSControlStateValueOn;
+    pass &= [self useIconNamed:@"invalid"] && [self.iconName isEqual:@"IconBlue"];
     for (NSNumber *number in @[@100, @125, @137, @200]) {
         self.slider.integerValue = number.integerValue;
         [self.slider sendAction:self.slider.action to:self.slider.target];
@@ -285,7 +318,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         }];
         pass &= [[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:path atomically:YES];
     }
-    printf("UI: 倍率操作、未接続時の制御、ウインドウ描画 %s\n", pass ? "PASS" : "FAIL");
+    printf("UI: 倍率操作、未接続時の制御、アイコン切り替え、ウインドウ描画 %s\n", pass ? "PASS" : "FAIL");
     USExitCode = pass ? 0 : 1;
     fflush(stdout); [NSApp terminate:nil];
 }
