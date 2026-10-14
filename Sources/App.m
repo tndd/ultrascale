@@ -42,23 +42,25 @@ static int USExitCode = 0;
 @property(strong) USDisplayEngine *engine;
 @property(strong) NSPopUpButton *displayPicker;
 @property(strong) NSSlider *slider;
-@property(strong) NSTextField *percentLabel, *resolutionLabel, *statusLabel, *confirmationLabel;
+@property(strong) NSTextField *percentLabel, *resolutionLabel, *statusLabel, *undoLabel;
 @property(strong) USPreview *preview;
-@property(strong) NSButton *applyButton, *restoreButton, *keepButton;
+@property(strong) NSButton *applyButton, *restoreButton, *undoButton;
 @property(strong) NSButton *menuBarIconCheckbox;
 @property(strong) NSStatusItem *statusItem;
 @property(strong) NSMenu *iconMenu;
 @property(copy) NSString *iconName;
 @property(strong) NSTimer *timer;
 @property(copy) NSArray<USDisplay *> *displays;
-@property BOOL busy, pending, uiTest;
+@property BOOL busy, undoAvailable, uiTest;
 @property NSTimeInterval deadline;
+@property CGDirectDisplayID previousTarget;
+@property NSInteger previousPercent;
 - (void)show:(id)sender;
 - (void)refresh;
 - (void)scaleChanged:(id)sender;
 - (void)apply:(id)sender;
 - (void)restore:(id)sender;
-- (void)keep:(id)sender;
+- (void)rollback:(id)sender;
 - (void)tick;
 @end
 
@@ -186,10 +188,10 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     self.preview.accessibilityLabel = @"文字とUIの大きさのイメージ。実際の画質ではありません。";
     [view addSubview:self.preview];
     self.statusLabel = USLabel(view, @"", NSMakeRect(28, 127, 564, 57), 13, NO);
-    self.confirmationLabel = USLabel(view, @"", NSMakeRect(28, 91, 370, 34), 12, NO);
-    self.confirmationLabel.textColor = NSColor.systemOrangeColor;
-    self.keepButton = USButton(view, @"この設定を使う", NSMakeRect(428, 90, 167, 33), self, @selector(keep:));
-    self.keepButton.hidden = YES;
+    self.undoLabel = USLabel(view, @"", NSMakeRect(28, 91, 370, 34), 12, NO);
+    self.undoLabel.textColor = NSColor.systemOrangeColor;
+    self.undoButton = USButton(view, @"変更前の表示に戻す", NSMakeRect(398, 90, 197, 33), self, @selector(rollback:));
+    self.undoButton.hidden = YES;
     self.restoreButton = USButton(view, @"元の表示に戻す", NSMakeRect(25, 48, 165, 34), self, @selector(restore:));
     self.applyButton = USButton(view, @"HiDPIを適用", NSMakeRect(426, 48, 169, 34), self, @selector(apply:));
     self.applyButton.bezelColor = NSColor.controlAccentColor;
@@ -236,22 +238,26 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     }
     if (self.displays.count == 0) [self.displayPicker addItemWithTitle:@"外部モニタが接続されていません"];
     [self updateControls];
-    if (!self.engine.active && !self.pending) self.statusLabel.stringValue =
-        self.displays.count ? @"対象モニタと倍率を選んで適用してください。15秒以内に確認しなければ、HiDPIを解除します。" :
+    if (!self.engine.active && !self.undoAvailable) self.statusLabel.stringValue =
+        self.displays.count ? @"対象モニタと倍率を選んで適用してください。適用後15秒間は変更を取り消せます。" :
         @"3440 × 1440の外部モニタを接続してください。\n接続前でも倍率と見かけの解像度を確認できます。";
 }
 - (void)updateControls {
     NSInteger index = self.displayPicker.indexOfSelectedItem;
     BOOL supported = index >= 0 && index < (NSInteger)self.displays.count && self.displays[index].supported;
-    self.applyButton.enabled = supported && !self.busy && !self.pending;
+    self.applyButton.enabled = supported && !self.busy;
     self.restoreButton.enabled = self.engine.active && !self.busy;
-    self.slider.enabled = !self.busy && !self.pending;
-    self.displayPicker.enabled = self.displays.count > 0 && !self.busy && !self.pending;
-    self.keepButton.hidden = !self.pending;
+    self.slider.enabled = !self.busy;
+    self.displayPicker.enabled = self.displays.count > 0 && !self.busy;
+    self.undoButton.hidden = !self.undoAvailable;
+    self.undoButton.enabled = !self.busy;
 }
 - (void)apply:(id)sender {
     (void)sender;
     if (!self.applyButton.enabled) return;
+    CGDirectDisplayID previousTarget = self.engine.active ? self.engine.target : 0;
+    NSInteger previousPercent = self.engine.active ? self.engine.percent : 0;
+    self.undoAvailable = NO; self.undoLabel.stringValue = @"";
     self.busy = YES; [self updateControls];
     self.statusLabel.stringValue = @"HiDPIモードを準備しています…";
     NSError *error = nil;
@@ -259,28 +265,44 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         percent:self.slider.integerValue error:&error];
     self.busy = NO;
     if (ok) {
-        self.pending = YES; self.deadline = NSProcessInfo.processInfo.systemUptime + 15;
-        self.statusLabel.stringValue = @"文字と画面全体が正しく見えることを確認してください。\n見えない場合は操作せずに待つと、HiDPIを解除します。";
+        self.previousTarget = previousTarget; self.previousPercent = previousPercent;
+        self.undoAvailable = YES; self.deadline = NSProcessInfo.processInfo.systemUptime + 15;
+        [self updateAppliedStatus];
         [self show:nil]; [self tick];
     } else {
         [self refresh]; self.statusLabel.stringValue = error.localizedDescription ?: @"適用できませんでした。";
     }
     [self updateControls];
 }
-- (void)keep:(id)sender {
-    (void)sender;
-    if (!self.pending || self.busy) return;
-    self.pending = NO; self.confirmationLabel.stringValue = @"";
+- (void)updateAppliedStatus {
     self.statusLabel.stringValue = [NSString stringWithFormat:@"HiDPI  %ld%% を適用中です。\nウインドウを閉じても動作を続けます。DockやLaunchpadから再表示できます。", self.engine.percent];
-    [self updateControls];
+}
+- (void)rollback:(id)sender {
+    (void)sender;
+    if (!self.undoAvailable || self.busy) return;
+    if (NSProcessInfo.processInfo.systemUptime >= self.deadline) { [self tick]; return; }
+    self.busy = YES; self.undoAvailable = NO; [self updateControls];
+    NSError *error = nil;
+    BOOL ok = self.previousPercent > 0 ?
+        [self.engine applyTo:self.previousTarget percent:self.previousPercent error:&error] :
+        [self.engine restore:&error];
+    self.busy = NO; self.undoLabel.stringValue = @"";
+    if (ok && self.previousPercent > 0) {
+        self.slider.integerValue = self.previousPercent; [self scaleChanged:nil];
+    }
+    [self refresh];
+    if (ok && self.engine.active) [self updateAppliedStatus];
+    else self.statusLabel.stringValue = ok ? @"変更を取り消し、変更前の通常表示に戻しました。" : error.localizedDescription;
+    self.previousTarget = 0; self.previousPercent = 0;
 }
 - (void)restore:(id)sender {
     (void)sender;
     if (self.busy) return;
-    self.busy = YES; self.pending = NO;
+    self.busy = YES; self.undoAvailable = NO;
+    self.previousTarget = 0; self.previousPercent = 0;
     NSError *error = nil;
     BOOL ok = [self.engine restore:&error];
-    self.busy = NO; self.confirmationLabel.stringValue = @"";
+    self.busy = NO; self.undoLabel.stringValue = @"";
     [self refresh];
     self.statusLabel.stringValue = ok ? @"HiDPIを解除し、元の通常表示に戻しました。" : error.localizedDescription;
 }
@@ -289,10 +311,13 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     if (self.engine.active && !self.engine.isHealthy) {
         [self restore:nil]; return;
     }
-    if (self.pending) {
+    if (self.undoAvailable) {
         NSInteger remaining = (NSInteger)ceil(self.deadline - NSProcessInfo.processInfo.systemUptime);
-        if (remaining <= 0) { [self restore:nil]; return; }
-        self.confirmationLabel.stringValue = [NSString stringWithFormat:@"あと%ld秒でHiDPIを解除します。", remaining];
+        if (remaining <= 0) {
+            self.undoAvailable = NO; self.previousTarget = 0; self.previousPercent = 0;
+            self.undoLabel.stringValue = @""; [self updateControls]; return;
+        }
+        self.undoLabel.stringValue = [NSString stringWithFormat:@"変更を取り消せます（あと%ld秒）", remaining];
     }
 }
 - (void)displaysChanged:(NSNotification *)notification { (void)notification; [self refresh]; }
@@ -329,11 +354,14 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     }
     pass &= !self.engine.active && !self.restoreButton.enabled;
     if (!self.displays.count) pass &= !self.applyButton.enabled;
-    self.pending = YES; self.deadline = NSProcessInfo.processInfo.systemUptime - 1;
+    NSString *statusBeforeExpiration = self.statusLabel.stringValue;
+    self.undoAvailable = YES; self.deadline = NSProcessInfo.processInfo.systemUptime - 1;
     [self tick];
-    pass &= !self.pending && !self.engine.active && self.keepButton.hidden;
-    self.pending = YES; [self keep:nil];
-    pass &= !self.pending && self.keepButton.hidden;
+    pass &= !self.undoAvailable && !self.engine.active && self.undoButton.hidden;
+    pass &= [self.statusLabel.stringValue isEqual:statusBeforeExpiration];
+    self.undoAvailable = YES; self.deadline = NSProcessInfo.processInfo.systemUptime + 15;
+    [self updateControls]; [self.undoButton performClick:nil];
+    pass &= !self.undoAvailable && self.undoButton.hidden && !self.engine.active;
     [self refresh];
     self.slider.integerValue = 125; [self scaleChanged:nil];
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.2]];
@@ -350,7 +378,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         }];
         pass &= [[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:path atomically:YES];
     }
-    printf("UI: 倍率操作、未接続時の制御、アイコン切り替え、メニューバーの表示切り替え・再表示、ウインドウ描画 %s\n", pass ? "PASS" : "FAIL");
+    printf("UI: 倍率操作、未接続時の制御、アイコン切り替え、メニューバーの表示切り替え・再表示、取り消し操作・期限切れ、ウインドウ描画 %s\n", pass ? "PASS" : "FAIL");
     USExitCode = pass ? 0 : 1;
     fflush(stdout); [NSApp terminate:nil];
 }
