@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 app="${1:-build/UltraScale.app}"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" build
 xcrun clang -fobjc-arc -O2 -Wall -Wextra -Werror -mmacosx-version-min=14.0 \
-  -framework Cocoa -framework CoreGraphics Sources/DisplayEngine.m Sources/App.m \
+  -framework Cocoa -framework CoreGraphics -framework ScreenCaptureKit -framework MetalKit -framework Metal -framework CoreImage -framework CoreMedia -framework CoreVideo Sources/ImagePipeline.m Sources/FramePresenter.m Sources/DisplayEngine.m Sources/App.m \
   -o "$app/Contents/MacOS/UltraScale"
 cp Info.plist "$app/Contents/Info.plist"
 for color in Blue Green; do

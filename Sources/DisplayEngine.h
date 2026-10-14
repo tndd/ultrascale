@@ -20,8 +20,14 @@ FOUNDATION_EXPORT BOOL USWaitForMode(CGDirectDisplayID display, USSize logical, 
 @property(readonly) CGDirectDisplayID virtualID;
 @property(readonly) NSInteger percent;
 @property(readonly) BOOL active;
+@property BOOL useFilters;
+@property(nonatomic) NSInteger filter;
+@property(nonatomic) double sharpness;
+@property(readonly) BOOL activeUsesFilters;
+@property(readonly) NSUInteger capturedFrames;
 - (NSArray<USDisplay *> *)displays;
 - (BOOL)applyTo:(CGDirectDisplayID)target percent:(NSInteger)percent error:(NSError **)error;
 - (BOOL)restore:(NSError **)error;
 - (BOOL)isHealthy;
+- (BOOL)writeFilteredSnapshotTo:(NSString *)path error:(NSError **)error;
 @end

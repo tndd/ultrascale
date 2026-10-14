@@ -1,6 +1,17 @@
 #import "DisplayEngine.h"
 
 static int USExitCode = 0;
+// AppKitが捕捉した例外も診断できるようにし、テストでは成功扱いにしない。
+@interface USApplication : NSApplication
+@end
+@implementation USApplication
+- (void)reportException:(NSException *)exception {
+    fprintf(stderr, "UltraScale: %s: %s\n", exception.name.UTF8String, exception.reason.UTF8String);
+    fflush(stderr);
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--ui-test"] || [NSProcessInfo.processInfo.arguments containsObject:@"--stream-test"]) exit(1);
+    [super reportException:exception];
+}
+@end
 @interface USBackground : NSView
 @end
 @implementation USBackground
@@ -37,6 +48,21 @@ static int USExitCode = 0;
 }
 @end
 
+@interface USFilterPattern : NSView
+@end
+@implementation USFilterPattern
+- (void)drawRect:(NSRect)rect {
+    (void)rect; [NSColor.whiteColor setFill]; NSRectFill(self.bounds);
+    [NSColor.systemOrangeColor setFill]; NSRectFill(NSMakeRect(0,self.bounds.size.height-60,self.bounds.size.width,60));
+    [NSColor.systemBlueColor setFill]; NSRectFill(NSMakeRect(0,0,self.bounds.size.width,60));
+    [@"上 / TOP — 日本語の細い文字 AaBb 0123456789" drawAtPoint:NSMakePoint(24,self.bounds.size.height-40)
+        withAttributes:@{NSFontAttributeName:[NSFont systemFontOfSize:20],NSForegroundColorAttributeName:NSColor.blackColor}];
+    [@"下 / BOTTOM — カーソルとクリックも確認" drawAtPoint:NSMakePoint(24,20)
+        withAttributes:@{NSFontAttributeName:[NSFont systemFontOfSize:20],NSForegroundColorAttributeName:NSColor.whiteColor}];
+    for (int x=24;x<800;x+=4) { [NSColor.blackColor setFill]; NSRectFill(NSMakeRect(x,220,1,140)); }
+}
+@end
+
 @interface USApp : NSObject <NSApplicationDelegate, NSWindowDelegate>
 @property(strong) NSWindow *window;
 @property(strong) USDisplayEngine *engine;
@@ -45,7 +71,11 @@ static int USExitCode = 0;
 @property(strong) NSTextField *percentLabel, *resolutionLabel, *statusLabel, *undoLabel;
 @property(strong) USPreview *preview;
 @property(strong) NSButton *applyButton, *rollbackButton;
-@property(strong) NSButton *menuBarIconCheckbox;
+@property(strong) NSButton *menuBarIconCheckbox, *qualityCheckbox;
+@property(strong) NSPopUpButton *filterPicker;
+@property(strong) NSSlider *sharpnessSlider;
+@property(strong) NSTextField *sharpnessLabel;
+@property BOOL previousUseFilters, testClickReceived;
 @property(strong) NSStatusItem *statusItem;
 @property(strong) NSMenu *iconMenu;
 @property(copy) NSString *iconName;
@@ -81,7 +111,8 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
     (void)notification;
     self.engine = [USDisplayEngine new];
-    self.uiTest = [NSProcessInfo.processInfo.arguments containsObject:@"--ui-test"];
+    BOOL streamTest = [NSProcessInfo.processInfo.arguments containsObject:@"--stream-test"];
+    self.uiTest = streamTest || [NSProcessInfo.processInfo.arguments containsObject:@"--ui-test"];
     [NSUserDefaults.standardUserDefaults registerDefaults:@{@"showMenuBarIcon":@YES}];
     [self createMenu];
     NSString *savedIcon = [NSUserDefaults.standardUserDefaults stringForKey:@"iconName"];
@@ -94,7 +125,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     self.timer = [NSTimer timerWithTimeInterval:0.5 target:self selector:@selector(tick) userInfo:nil repeats:YES];
     [NSRunLoop.mainRunLoop addTimer:self.timer forMode:NSRunLoopCommonModes];
     [self refresh]; [self show:nil];
-    if (self.uiTest) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 2), dispatch_get_main_queue(), ^{ [self runUITest]; });
+    if (self.uiTest) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 2), dispatch_get_main_queue(), ^{ if (streamTest) [self runStreamTest]; else [self runUITest]; });
 }
 - (void)createMenu {
     NSMenu *menu = [NSMenu new];
@@ -156,12 +187,12 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         [NSUserDefaults.standardUserDefaults setObject:self.iconName forKey:@"iconName"];
 }
 - (void)createWindow {
-    self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 620, 686)
+    self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 620, 846)
         styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable
         backing:NSBackingStoreBuffered defer:NO];
     self.window.title = @"UltraScale"; self.window.delegate = self;
     self.window.releasedWhenClosed = NO;
-    self.window.contentView = [[USBackground alloc] initWithFrame:NSMakeRect(0, 0, 620, 686)];
+    self.window.contentView = [[USBackground alloc] initWithFrame:NSMakeRect(0, 0, 620, 846)];
     [self.window center];
     NSView *view = self.window.contentView;
     USLabel(view, @"ちょうどいい、大きさに。", NSMakeRect(28, 589, 560, 34), 25, YES);
@@ -196,17 +227,63 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     NSTextField *footnote = USLabel(view, @"1%刻み・60 Hz / 適用時に画面が切り替わります。終了すると元の表示へ戻ります。", NSMakeRect(28, 15, 564, 25), 10, NO);
     footnote.textColor = NSColor.secondaryLabelColor;
     for (NSView *item in view.subviews) {
-        NSRect frame = item.frame; frame.origin.y += 36; item.frame = frame;
+        NSRect frame = item.frame; frame.origin.y += 196; item.frame = frame;
     }
     self.menuBarIconCheckbox = [NSButton checkboxWithTitle:@"メニューバーにアイコンを表示"
         target:self action:@selector(menuBarIconChanged:)];
     self.menuBarIconCheckbox.frame = NSMakeRect(28, 15, 300, 24);
     self.menuBarIconCheckbox.state = self.statusItem ? NSControlStateValueOn : NSControlStateValueOff;
     [view addSubview:self.menuBarIconCheckbox];
+    self.qualityCheckbox = [NSButton checkboxWithTitle:@"画質調整モード（試験）" target:self action:@selector(qualityChanged:)];
+    self.qualityCheckbox.frame = NSMakeRect(28, 165, 500, 24);
+    self.qualityCheckbox.state = !self.uiTest && [NSUserDefaults.standardUserDefaults boolForKey:@"useFilters"] ? NSControlStateValueOn : NSControlStateValueOff;
+    [view addSubview:self.qualityCheckbox];
+    USLabel(view, @"縮小フィルタ", NSMakeRect(28, 123, 95, 24), 12, NO);
+    self.filterPicker = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(120, 119, 180, 30) pullsDown:NO];
+    [self.filterPicker addItemsWithTitles:@[@"バイリニア", @"バイキュービック", @"Lanczos"]];
+    self.filterPicker.target = self; self.filterPicker.action = @selector(qualityChanged:);
+    self.filterPicker.accessibilityLabel = @"縮小フィルタ";
+    NSInteger filter = [NSUserDefaults.standardUserDefaults objectForKey:@"filter"] && !self.uiTest ? [NSUserDefaults.standardUserDefaults integerForKey:@"filter"] : 2;
+    [self.filterPicker selectItemAtIndex:MAX(0, MIN(2, filter))]; [view addSubview:self.filterPicker];
+    self.sharpnessLabel = USLabel(view, @"シャープネス 25%", NSMakeRect(325, 151, 260, 22), 12, NO);
+    double sharpness = [NSUserDefaults.standardUserDefaults objectForKey:@"sharpness"] && !self.uiTest ? [NSUserDefaults.standardUserDefaults doubleForKey:@"sharpness"] : 25;
+    self.sharpnessSlider = [NSSlider sliderWithValue:MAX(0, MIN(100, sharpness)) minValue:0 maxValue:100 target:self action:@selector(qualityChanged:)];
+    self.sharpnessSlider.frame = NSMakeRect(323, 121, 270, 26); self.sharpnessSlider.continuous = YES;
+    self.sharpnessSlider.accessibilityLabel = @"シャープネス、0から100パーセント"; [view addSubview:self.sharpnessSlider];
+    NSTextField *hint = USLabel(view, @"画面収録とアクセシビリティの許可が必要です。モード変更は「HiDPIを適用」。画質調整中のフィルタと強度は即座に反映します。", NSMakeRect(28, 65, 564, 45), 11, NO);
+    hint.textColor = NSColor.secondaryLabelColor;
+    [self qualityChanged:nil];
     [self scaleChanged:nil];
+}
+- (void)qualityChanged:(id)sender {
+    (void)sender;
+    self.engine.useFilters = self.qualityCheckbox.state == NSControlStateValueOn;
+    self.engine.filter = self.filterPicker.indexOfSelectedItem;
+    self.engine.sharpness = self.sharpnessSlider.doubleValue / 100.0;
+    self.sharpnessLabel.stringValue = [NSString stringWithFormat:@"シャープネス %.0f%%", self.sharpnessSlider.doubleValue];
+    self.filterPicker.enabled = self.engine.useFilters && !self.busy;
+    self.sharpnessSlider.enabled = self.engine.useFilters && !self.busy;
+    if (!self.uiTest) {
+        [NSUserDefaults.standardUserDefaults setBool:self.engine.useFilters forKey:@"useFilters"];
+        [NSUserDefaults.standardUserDefaults setInteger:self.engine.filter forKey:@"filter"];
+        [NSUserDefaults.standardUserDefaults setDouble:self.sharpnessSlider.doubleValue forKey:@"sharpness"];
+    }
 }
 - (void)show:(id)sender {
     (void)sender;
+    if (self.engine.activeUsesFilters) {
+        NSScreen *destination = nil;
+        for (NSScreen *screen in NSScreen.screens) {
+            unsigned int identifier = [screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue];
+            if (CGDisplayIsBuiltin(identifier)) { destination = screen; break; }
+            if (identifier == self.engine.virtualID) destination = screen;
+        }
+        if (destination) {
+            NSRect frame = self.window.frame, available = destination.visibleFrame;
+            frame.origin = NSMakePoint(NSMidX(available) - frame.size.width / 2, NSMidY(available) - frame.size.height / 2);
+            [self.window setFrame:frame display:NO];
+        }
+    }
     [self.window makeKeyAndOrderFront:nil]; [NSApp activateIgnoringOtherApps:YES];
 }
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)app hasVisibleWindows:(BOOL)visible {
@@ -245,6 +322,9 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     BOOL supported = index >= 0 && index < (NSInteger)self.displays.count && self.displays[index].supported;
     self.applyButton.enabled = supported && !self.busy;
     self.rollbackButton.enabled = self.undoAvailable && !self.busy;
+    self.qualityCheckbox.enabled = !self.busy;
+    self.filterPicker.enabled = self.engine.useFilters && !self.busy;
+    self.sharpnessSlider.enabled = self.engine.useFilters && !self.busy;
     self.slider.enabled = !self.busy;
     self.displayPicker.enabled = self.displays.count > 0 && !self.busy;
 }
@@ -253,7 +333,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     if (!self.applyButton.enabled) return;
     CGDirectDisplayID previousTarget = self.engine.active ? self.engine.target : 0;
     NSInteger previousPercent = self.engine.active ? self.engine.percent : 0;
-    self.undoAvailable = NO; self.undoLabel.stringValue = @"";
+    BOOL previousUseFilters = self.engine.activeUsesFilters;
     self.busy = YES; [self updateControls];
     self.statusLabel.stringValue = @"HiDPIモードを準備しています…";
     NSError *error = nil;
@@ -261,17 +341,31 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         percent:self.slider.integerValue error:&error];
     self.busy = NO;
     if (ok) {
-        self.previousTarget = previousTarget; self.previousPercent = previousPercent;
+        self.previousTarget = previousTarget; self.previousPercent = previousPercent; self.previousUseFilters = previousUseFilters;
         self.undoAvailable = YES; self.deadline = NSProcessInfo.processInfo.systemUptime + 15;
         [self updateAppliedStatus];
         [self show:nil]; [self tick];
     } else {
-        [self refresh]; self.statusLabel.stringValue = error.localizedDescription ?: @"適用できませんでした。";
+        NSString *failure = error.localizedDescription ?: @"適用できませんでした。";
+        // 試験機能が失敗しても、通常のHiDPIを使える状態に戻す。
+        if (!self.engine.active && self.engine.useFilters) {
+            self.engine.useFilters = NO;
+            NSError *recoveryError = nil;
+            BOOL recovered = [self.engine applyTo:previousTarget ?: [self.displayPicker.selectedItem.representedObject unsignedIntValue]
+                percent:previousPercent ?: self.slider.integerValue error:&recoveryError];
+            if (!recovered) failure = [failure stringByAppendingFormat:@"\n通常HiDPIの復旧にも失敗: %@", recoveryError.localizedDescription];
+        }
+        self.qualityCheckbox.state = self.engine.activeUsesFilters ? NSControlStateValueOn : NSControlStateValueOff;
+        [self qualityChanged:nil];
+        if (!self.engine.active) { self.undoAvailable = NO; self.undoLabel.stringValue = @""; }
+        if (self.engine.active) { self.slider.integerValue = self.engine.percent; [self scaleChanged:nil]; }
+        [self refresh];
+        self.statusLabel.stringValue = self.engine.active ? [failure stringByAppendingFormat:@"\n%@ %ld%% は動作中です。", self.engine.activeUsesFilters ? @"画質調整" : @"通常HiDPI", self.engine.percent] : failure;
     }
     [self updateControls];
 }
 - (void)updateAppliedStatus {
-    self.statusLabel.stringValue = [NSString stringWithFormat:@"HiDPI  %ld%% を適用中です。\nウインドウを閉じても動作を続けます。DockやLaunchpadから再表示できます。", self.engine.percent];
+    self.statusLabel.stringValue = [NSString stringWithFormat:@"HiDPI  %ld%%%@ を適用中です。\nウインドウを閉じても動作を続けます。DockやLaunchpadから再表示できます。", self.engine.percent, self.engine.activeUsesFilters ? @"（画質調整）" : @""];
 }
 - (void)rollback:(id)sender {
     (void)sender;
@@ -279,12 +373,15 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     if (NSProcessInfo.processInfo.systemUptime >= self.deadline) { [self tick]; return; }
     self.busy = YES; self.undoAvailable = NO; [self updateControls];
     NSError *error = nil;
+    if (self.previousPercent > 0) self.engine.useFilters = self.previousUseFilters;
     BOOL ok = self.previousPercent > 0 ?
         [self.engine applyTo:self.previousTarget percent:self.previousPercent error:&error] :
         [self.engine restore:&error];
     self.busy = NO; self.undoLabel.stringValue = @"";
     if (ok && self.previousPercent > 0) {
         self.slider.integerValue = self.previousPercent; [self scaleChanged:nil];
+        self.qualityCheckbox.state = self.previousUseFilters ? NSControlStateValueOn : NSControlStateValueOff;
+        [self qualityChanged:nil];
     }
     [self refresh];
     if (ok && self.engine.active) [self updateAppliedStatus];
@@ -326,6 +423,69 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     if (self.busy) return NSTerminateCancel;
     [self.timer invalidate]; [self.engine restore:NULL]; return NSTerminateNow;
 }
+- (void)testPatternClicked:(NSButton *)sender { self.testClickReceived = YES; sender.title = @"クリックを確認"; }
+- (void)runStreamTest {
+    NSArray *args = NSProcessInfo.processInfo.arguments;
+    NSUInteger index = [args indexOfObject:@"--stream-test"];
+    NSString *directory = args.count > index+1 ? args[index+1] : nil;
+    NSError *error = nil; BOOL pass = directory != nil;
+    NSWindow *sample = nil;
+    self.qualityCheckbox.state = NSControlStateValueOn; [self qualityChanged:nil];
+    pass &= [self.engine applyTo:[self.displayPicker.selectedItem.representedObject unsignedIntValue]
+        percent:self.slider.integerValue error:&error];
+    pass &= self.engine.activeUsesFilters && self.engine.isHealthy;
+    if (pass) {
+        NSScreen *source = nil;
+        for (NSScreen *screen in NSScreen.screens) if ([screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue] == self.engine.virtualID) source = screen;
+        if (!source) pass = NO;
+        else {
+            NSRect frame = NSMakeRect(source.frame.origin.x + 200, source.frame.origin.y + 220, 900, 500);
+            sample = [[NSWindow alloc] initWithContentRect:frame styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
+            sample.releasedWhenClosed = NO; sample.title = @"UltraScale 画質と入力の実機検証";
+            [sample setFrame:NSMakeRect(frame.origin.x,frame.origin.y,900,528) display:NO];
+            sample.contentView = [[USFilterPattern alloc] initWithFrame:NSMakeRect(0,0,900,500)];
+            NSButton *button = USButton(sample.contentView,@"クリックを試す",NSMakeRect(25,100,240,40),self,@selector(testPatternClicked:));
+            [sample makeKeyAndOrderFront:nil];
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:1]];
+            CGEventRef original = CGEventCreate(NULL); CGPoint originalPoint = CGEventGetLocation(original); CFRelease(original);
+            NSPoint location = [sample convertPointToScreen:NSMakePoint(NSMidX(button.frame),NSMidY(button.frame))];
+            CGFloat mainTop = 0;
+            for (NSScreen *screen in NSScreen.screens) if ([screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue] == CGMainDisplayID()) mainTop = NSMaxY(screen.frame);
+            CGPoint point = CGPointMake(location.x,mainTop-location.y);
+            CGWarpMouseCursorPosition(point);
+            for (NSNumber *type in @[@(kCGEventLeftMouseDown),@(kCGEventLeftMouseUp)]) {
+                CGEventRef event = CGEventCreateMouseEvent(NULL,type.unsignedIntValue,point,kCGMouseButtonLeft); CGEventPost(kCGHIDEventTap,event); CFRelease(event);
+            }
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+            CGWarpMouseCursorPosition(originalPoint); pass &= self.testClickReceived;
+            [NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:&error];
+            for (NSInteger filter=0;filter<3;filter++) {
+                self.engine.filter = filter; self.engine.sharpness = 0;
+                [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.3]];
+                pass &= [self.engine writeFilteredSnapshotTo:[directory stringByAppendingPathComponent:[NSString stringWithFormat:@"stream-%ld.png",filter]] error:&error];
+                pass &= self.engine.isHealthy;
+            }
+            self.engine.filter = 2; self.engine.sharpness = 0.25;
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.3]];
+            pass &= [self.engine writeFilteredSnapshotTo:[directory stringByAppendingPathComponent:@"stream-sharp25.png"] error:&error];
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:16]];
+            BOOL presented = NO;
+            NSArray *windows = CFBridgingRelease(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
+            for (NSDictionary *window in windows) {
+                CGRect bounds = CGRectZero;
+                if ([window[(__bridge NSString *)kCGWindowOwnerPID] intValue] == NSProcessInfo.processInfo.processIdentifier &&
+                    CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)window[(__bridge NSString *)kCGWindowBounds], &bounds) &&
+                    CGRectEqualToRect(bounds, CGDisplayBounds(self.engine.target))) presented = YES;
+            }
+            pass &= self.engine.capturedFrames > 0 && self.engine.isHealthy && presented;
+            printf("実機ストリーム: frames=%lu input=%s presentation=%s\n",(unsigned long)self.engine.capturedFrames,self.testClickReceived ? "PASS" : "FAIL",presented ? "PASS" : "FAIL");
+        }
+    }
+    if (error) fprintf(stderr,"%s\n",error.localizedDescription.UTF8String);
+    [sample close]; pass &= [self.engine restore:&error];
+    printf("実機ストリーム検証: %s\n",pass ? "PASS" : "FAIL");
+    USExitCode = pass ? 0 : 1; fflush(stdout); exit(USExitCode);
+}
 - (void)runUITest {
     // 通常のアプリと同じウインドウ・コントロールを動かす。画面設定は変更しない。
     BOOL pass = YES;
@@ -348,6 +508,14 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         [self.slider sendAction:self.slider.action to:self.slider.target];
         pass &= [self.percentLabel.stringValue isEqual:[NSString stringWithFormat:@"%@%%", number]];
     }
+    [self.qualityCheckbox performClick:nil];
+    pass &= self.engine.useFilters && self.filterPicker.enabled && self.sharpnessSlider.enabled;
+    [self.filterPicker selectItemAtIndex:1]; [self.filterPicker sendAction:self.filterPicker.action to:self.filterPicker.target];
+    self.sharpnessSlider.doubleValue = 75; [self.sharpnessSlider sendAction:self.sharpnessSlider.action to:self.sharpnessSlider.target];
+    pass &= self.engine.filter == 1 && fabs(self.engine.sharpness - 0.75) < 0.0001;
+    [self.qualityCheckbox performClick:nil];
+    pass &= !self.engine.useFilters && !self.filterPicker.enabled && !self.sharpnessSlider.enabled;
+    [self.filterPicker selectItemAtIndex:2]; self.sharpnessSlider.doubleValue = 25; [self qualityChanged:nil];
     pass &= !self.engine.active && !self.rollbackButton.enabled;
     if (!self.displays.count) pass &= !self.applyButton.enabled;
     NSString *statusBeforeExpiration = self.statusLabel.stringValue;
@@ -374,15 +542,15 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         }];
         pass &= [[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:path atomically:YES];
     }
-    printf("UI: 倍率操作、未接続時の制御、アイコン切り替え、メニューバーの表示切り替え・再表示、取り消し操作・期限切れ、ウインドウ描画 %s\n", pass ? "PASS" : "FAIL");
+    printf("UI: 倍率操作、未接続時の制御、アイコン切り替え、メニューバーの表示切り替え・再表示、取り消し操作・期限切れ、フィルタ・シャープネス操作、ウインドウ描画 %s\n", pass ? "PASS" : "FAIL");
     USExitCode = pass ? 0 : 1;
-    fflush(stdout); [NSApp terminate:nil];
+    fflush(stdout); exit(USExitCode);
 }
 @end
 
 int main(void) {
     @autoreleasepool {
-        NSApplication *application = NSApplication.sharedApplication;
+        NSApplication *application = USApplication.sharedApplication;
         [application setActivationPolicy:NSApplicationActivationPolicyRegular];
         USApp *delegate = [USApp new]; application.delegate = delegate;
         [application run];
