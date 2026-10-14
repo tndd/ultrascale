@@ -44,7 +44,7 @@ static int USExitCode = 0;
 @property(strong) NSSlider *slider;
 @property(strong) NSTextField *percentLabel, *resolutionLabel, *statusLabel, *undoLabel;
 @property(strong) USPreview *preview;
-@property(strong) NSButton *applyButton, *restoreButton, *undoButton;
+@property(strong) NSButton *applyButton, *rollbackButton;
 @property(strong) NSButton *menuBarIconCheckbox;
 @property(strong) NSStatusItem *statusItem;
 @property(strong) NSMenu *iconMenu;
@@ -190,9 +190,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     self.statusLabel = USLabel(view, @"", NSMakeRect(28, 127, 564, 57), 13, NO);
     self.undoLabel = USLabel(view, @"", NSMakeRect(28, 91, 370, 34), 12, NO);
     self.undoLabel.textColor = NSColor.systemOrangeColor;
-    self.undoButton = USButton(view, @"変更前の表示に戻す", NSMakeRect(398, 90, 197, 33), self, @selector(rollback:));
-    self.undoButton.hidden = YES;
-    self.restoreButton = USButton(view, @"元の表示に戻す", NSMakeRect(25, 48, 165, 34), self, @selector(restore:));
+    self.rollbackButton = USButton(view, @"変更前の表示に戻す", NSMakeRect(25, 48, 215, 34), self, @selector(rollback:));
     self.applyButton = USButton(view, @"HiDPIを適用", NSMakeRect(426, 48, 169, 34), self, @selector(apply:));
     self.applyButton.bezelColor = NSColor.controlAccentColor;
     NSTextField *footnote = USLabel(view, @"1%刻み・60 Hz / 適用時に画面が切り替わります。終了すると元の表示へ戻ります。", NSMakeRect(28, 15, 564, 25), 10, NO);
@@ -246,11 +244,9 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     NSInteger index = self.displayPicker.indexOfSelectedItem;
     BOOL supported = index >= 0 && index < (NSInteger)self.displays.count && self.displays[index].supported;
     self.applyButton.enabled = supported && !self.busy;
-    self.restoreButton.enabled = self.engine.active && !self.busy;
+    self.rollbackButton.enabled = self.undoAvailable && !self.busy;
     self.slider.enabled = !self.busy;
     self.displayPicker.enabled = self.displays.count > 0 && !self.busy;
-    self.undoButton.hidden = !self.undoAvailable;
-    self.undoButton.enabled = !self.busy;
 }
 - (void)apply:(id)sender {
     (void)sender;
@@ -352,16 +348,16 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         [self.slider sendAction:self.slider.action to:self.slider.target];
         pass &= [self.percentLabel.stringValue isEqual:[NSString stringWithFormat:@"%@%%", number]];
     }
-    pass &= !self.engine.active && !self.restoreButton.enabled;
+    pass &= !self.engine.active && !self.rollbackButton.enabled;
     if (!self.displays.count) pass &= !self.applyButton.enabled;
     NSString *statusBeforeExpiration = self.statusLabel.stringValue;
     self.undoAvailable = YES; self.deadline = NSProcessInfo.processInfo.systemUptime - 1;
     [self tick];
-    pass &= !self.undoAvailable && !self.engine.active && self.undoButton.hidden;
+    pass &= !self.undoAvailable && !self.engine.active && !self.rollbackButton.enabled;
     pass &= [self.statusLabel.stringValue isEqual:statusBeforeExpiration];
     self.undoAvailable = YES; self.deadline = NSProcessInfo.processInfo.systemUptime + 15;
-    [self updateControls]; [self.undoButton performClick:nil];
-    pass &= !self.undoAvailable && self.undoButton.hidden && !self.engine.active;
+    [self updateControls]; [self.rollbackButton performClick:nil];
+    pass &= !self.undoAvailable && !self.rollbackButton.enabled && !self.engine.active;
     [self refresh];
     self.slider.integerValue = 125; [self scaleChanged:nil];
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.2]];
