@@ -1,0 +1,20 @@
+{
+  "tool": "built-in image_gen",
+  "concepts": [
+    {
+      "id": "a",
+      "file": "a-monitor.png",
+      "prompt": "Use case: logo-brand. Create one polished macOS app icon concept for UltraScale, a small native utility for adjusting HiDPI scaling on ultrawide monitors. Single icon, square composition, centered rounded-square macOS icon tile on a quiet neutral light gray background with ample margin, no words or letters, no numbers, no watermark, not an Apple logo. Purpose: understandable at small Dock sizes, elegant restrained geometry, strong simple silhouette, premium subtle material and lighting. This is a visual candidate, not a comparison board. Concept A: a deep midnight-blue rounded-square tile containing a crisp luminous cyan ultrawide monitor outline with a small discreet stand, and one horizontal scaling slider beneath the screen, white slider thumb. The wide monitor shape is the central recognizable motif. Blue-cyan palette, precise and calm, restrained depth, avoid excessive glow, front view."
+    },
+    {
+      "id": "b",
+      "file": "b-layers.png",
+      "prompt": "Use case: logo-brand. Create one polished macOS app icon concept for UltraScale, a small native utility for adjusting HiDPI scaling on ultrawide monitors. Single icon, square composition, centered rounded-square macOS icon tile on a quiet neutral light gray background with ample margin, no words or letters, no numbers, no watermark, not an Apple logo. Purpose: understandable at small Dock sizes, elegant restrained geometry, strong simple silhouette, premium subtle material and lighting. This is a visual candidate, not a comparison board. Concept B: a soft pearlescent off-white rounded-square tile with two overlapping ultrawide rounded rectangular panes in pale teal and saturated emerald, the smaller pane cleanly scaling into the larger one. Minimal sculptural layered translucent glass with clearly separated edges, no stand, no arrows, one memorable geometric mark, refined friendly utility-app aesthetic. Front view with very subtle depth."
+    },
+    {
+      "id": "c",
+      "file": "c-pixels.png",
+      "prompt": "Use case: logo-brand. Create one polished macOS app icon concept for UltraScale, a small native utility for adjusting HiDPI scaling on ultrawide monitors. Single icon, square composition, centered rounded-square macOS icon tile on a quiet neutral light gray background with ample margin, no words or letters, no numbers, no watermark, not an Apple logo. Purpose: understandable at small Dock sizes, elegant restrained geometry, strong simple silhouette, premium subtle material and lighting. This is a visual candidate, not a comparison board. Concept C: a deep charcoal rounded-square tile with a single bold warm orange-to-coral ribbon sweep, the left beginning as a few clearly separated square pixels and the right resolving into one smooth continuous curved edge. Abstract metaphor for crisp HiDPI scaling, not a monitor or magnifying glass. Keep only a handful of large squares, minimal disciplined composition, strong readability as a tiny icon, restrained tactile 3D relief."
+    }
+  ]
+}

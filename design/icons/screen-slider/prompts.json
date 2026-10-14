@@ -1,0 +1,30 @@
+{
+  "tool": "built-in image_gen",
+  "reference": "../b-layers.png",
+  "concepts": [
+    {
+      "id": "green-round",
+      "name": "緑・丸いつまみ",
+      "file": "green-round.png",
+      "prompt": "Use case: logo-brand. Edit the supplied reference icon, which is a WHITE pearlescent rounded-square macOS app tile containing TWO OVERLAPPING TRANSLUCENT GREEN SCREEN PANELS. Preserve the reference's identity and composition: small pane in front on the left, large pane behind on the right, rounded corners, curved lower edge and glassy gradients, restrained sculptural depth, delicate highlights, white tile and pale gray external background. Move the TWO PANES TOGETHER upward by roughly 10 percent of the tile height, retaining their shape, relative scale and overlap. Add one elegant abstract horizontal scaling slider UNDER the panes, centered, with generous clear separation. Make the slider subordinate, so the translucent screens remain the hero. Preserve the front viewpoint, tile size, margins, restrained shadows, and visual simplicity. No literal monitor stand, no ribbon or pixel motif, no letters, text, ticks, numbers, or watermark. Keep the reference mint-to-teal and emerald palette. Slider: very slender softly translucent pale mint track with a richer teal active segment and a small circular frosted-glass thumb positioned at 65 percent. Refined light appearance, no dark trough, no strong neon glow."
+    },
+    {
+      "id": "green-pill",
+      "name": "緑・角丸のつまみ",
+      "file": "green-pill.png",
+      "prompt": "Use case: logo-brand. Edit the supplied reference icon, which is a WHITE pearlescent rounded-square macOS app tile containing TWO OVERLAPPING TRANSLUCENT GREEN SCREEN PANELS. Preserve the reference's identity and composition: small pane in front on the left, large pane behind on the right, rounded corners, curved lower edge and glassy gradients, restrained sculptural depth, delicate highlights, white tile and pale gray external background. Move the TWO PANES TOGETHER upward by roughly 10 percent of the tile height, retaining their shape, relative scale and overlap. Add one elegant abstract horizontal scaling slider UNDER the panes, centered, with generous clear separation. Make the slider subordinate, so the translucent screens remain the hero. Preserve the front viewpoint, tile size, margins, restrained shadows, and visual simplicity. No literal monitor stand, no ribbon or pixel motif, no letters, text, ticks, numbers, or watermark. Keep the reference mint-to-teal and emerald palette. Slider: a minimal thin rounded translucent green bar with a pale mint continuation and a small horizontally elongated rounded-rectangle glass thumb at 60 percent. The thumb echoes the screen panes. Clear but subtle glass material, floating very slightly above the white tile, no dark trough."
+    },
+    {
+      "id": "blue-round",
+      "name": "青・丸いつまみ",
+      "file": "blue-round.png",
+      "prompt": "Use case: logo-brand. Edit the supplied reference icon, which is a WHITE pearlescent rounded-square macOS app tile containing TWO OVERLAPPING TRANSLUCENT GREEN SCREEN PANELS. Preserve the reference's identity and composition: small pane in front on the left, large pane behind on the right, rounded corners, curved lower edge and glassy gradients, restrained sculptural depth, delicate highlights, white tile and pale gray external background. Move the TWO PANES TOGETHER upward by roughly 10 percent of the tile height, retaining their shape, relative scale and overlap. Add one elegant abstract horizontal scaling slider UNDER the panes, centered, with generous clear separation. Make the slider subordinate, so the translucent screens remain the hero. Preserve the front viewpoint, tile size, margins, restrained shadows, and visual simplicity. No literal monitor stand, no ribbon or pixel motif, no letters, text, ticks, numbers, or watermark. Recolor the panes to icy cyan-to-azure and rich blue, keeping the small front pane paler and more transparent and the large back pane saturated blue. Keep the white tile WHITE. Slider: very slender softly translucent pale ice-blue track with a richer azure active segment and a small circular frosted-glass blue thumb positioned at 65 percent. Refined light appearance, no dark trough, no strong neon glow."
+    },
+    {
+      "id": "blue-pill",
+      "name": "青・角丸のつまみ",
+      "file": "blue-pill.png",
+      "prompt": "Use case: logo-brand. Edit the supplied reference icon, which is a WHITE pearlescent rounded-square macOS app tile containing TWO OVERLAPPING TRANSLUCENT GREEN SCREEN PANELS. Preserve the reference's identity and composition: small pane in front on the left, large pane behind on the right, rounded corners, curved lower edge and glassy gradients, restrained sculptural depth, delicate highlights, white tile and pale gray external background. Move the TWO PANES TOGETHER upward by roughly 10 percent of the tile height, retaining their shape, relative scale and overlap. Add one elegant abstract horizontal scaling slider UNDER the panes, centered, with generous clear separation. Make the slider subordinate, so the translucent screens remain the hero. Preserve the front viewpoint, tile size, margins, restrained shadows, and visual simplicity. No literal monitor stand, no ribbon or pixel motif, no letters, text, ticks, numbers, or watermark. Recolor the panes to icy cyan-to-azure and rich blue, keeping the small front pane paler and more transparent and the large back pane saturated blue. Keep the white tile WHITE. Slider: a minimal thin rounded translucent blue bar with a pale ice-blue continuation and a small horizontally elongated rounded-rectangle glass thumb at 60 percent. The thumb echoes the screen panes. Clear but subtle glass material, floating very slightly above the white tile, no dark trough."
+    }
+  ]
+}
