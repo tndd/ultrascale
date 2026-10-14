@@ -45,6 +45,7 @@ static int USExitCode = 0;
 @property(strong) NSTextField *percentLabel, *resolutionLabel, *statusLabel, *confirmationLabel;
 @property(strong) USPreview *preview;
 @property(strong) NSButton *applyButton, *restoreButton, *keepButton;
+@property(strong) NSButton *menuBarIconCheckbox;
 @property(strong) NSStatusItem *statusItem;
 @property(strong) NSMenu *iconMenu;
 @property(copy) NSString *iconName;
@@ -79,6 +80,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     (void)notification;
     self.engine = [USDisplayEngine new];
     self.uiTest = [NSProcessInfo.processInfo.arguments containsObject:@"--ui-test"];
+    [NSUserDefaults.standardUserDefaults registerDefaults:@{@"showMenuBarIcon":@YES}];
     [self createMenu];
     NSString *savedIcon = [NSUserDefaults.standardUserDefaults stringForKey:@"iconName"];
     [self useIconNamed:self.uiTest ? @"IconBlue" : (savedIcon ?: @"IconBlue")];
@@ -110,6 +112,15 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     NSMenuItem *show = [window.submenu addItemWithTitle:@"UltraScaleを表示" action:@selector(show:) keyEquivalent:@"0"];
     show.target = self;
     NSApp.mainMenu = menu;
+    [self setMenuBarIconVisible:self.uiTest || [NSUserDefaults.standardUserDefaults boolForKey:@"showMenuBarIcon"]];
+}
+- (void)setMenuBarIconVisible:(BOOL)visible {
+    if (!visible) {
+        if (self.statusItem) [NSStatusBar.systemStatusBar removeStatusItem:self.statusItem];
+        self.statusItem = nil;
+        return;
+    }
+    if (self.statusItem) return;
     self.statusItem = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength];
     self.statusItem.button.image = [NSImage imageWithSystemSymbolName:@"display" accessibilityDescription:@"UltraScale"];
     NSMenu *status = [NSMenu new];
@@ -121,6 +132,11 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     [status addItem:NSMenuItem.separatorItem];
     [status addItemWithTitle:@"終了して元の表示に戻す" action:@selector(terminate:) keyEquivalent:@"q"];
     self.statusItem.menu = status;
+}
+- (void)menuBarIconChanged:(NSButton *)sender {
+    BOOL visible = sender.state == NSControlStateValueOn;
+    [self setMenuBarIconVisible:visible];
+    if (!self.uiTest) [NSUserDefaults.standardUserDefaults setBool:visible forKey:@"showMenuBarIcon"];
 }
 - (BOOL)useIconNamed:(NSString *)name {
     if (![@[@"IconBlue", @"IconGreen"] containsObject:name]) name = @"IconBlue";
@@ -138,12 +154,12 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         [NSUserDefaults.standardUserDefaults setObject:self.iconName forKey:@"iconName"];
 }
 - (void)createWindow {
-    self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 620, 650)
+    self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 620, 686)
         styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable
         backing:NSBackingStoreBuffered defer:NO];
     self.window.title = @"UltraScale"; self.window.delegate = self;
     self.window.releasedWhenClosed = NO;
-    self.window.contentView = [[USBackground alloc] initWithFrame:NSMakeRect(0, 0, 620, 650)];
+    self.window.contentView = [[USBackground alloc] initWithFrame:NSMakeRect(0, 0, 620, 686)];
     [self.window center];
     NSView *view = self.window.contentView;
     USLabel(view, @"ちょうどいい、大きさに。", NSMakeRect(28, 589, 560, 34), 25, YES);
@@ -179,6 +195,14 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     self.applyButton.bezelColor = NSColor.controlAccentColor;
     NSTextField *footnote = USLabel(view, @"1%刻み・60 Hz / 適用時に画面が切り替わります。終了すると元の表示へ戻ります。", NSMakeRect(28, 15, 564, 25), 10, NO);
     footnote.textColor = NSColor.secondaryLabelColor;
+    for (NSView *item in view.subviews) {
+        NSRect frame = item.frame; frame.origin.y += 36; item.frame = frame;
+    }
+    self.menuBarIconCheckbox = [NSButton checkboxWithTitle:@"メニューバーにアイコンを表示"
+        target:self action:@selector(menuBarIconChanged:)];
+    self.menuBarIconCheckbox.frame = NSMakeRect(28, 15, 300, 24);
+    self.menuBarIconCheckbox.state = self.statusItem ? NSControlStateValueOn : NSControlStateValueOff;
+    [view addSubview:self.menuBarIconCheckbox];
     [self scaleChanged:nil];
 }
 - (void)show:(id)sender {
@@ -247,7 +271,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     (void)sender;
     if (!self.pending || self.busy) return;
     self.pending = NO; self.confirmationLabel.stringValue = @"";
-    self.statusLabel.stringValue = [NSString stringWithFormat:@"HiDPI  %ld%% を適用中です。\nウインドウを閉じても動作を続けます。メニューバーから再表示できます。", self.engine.percent];
+    self.statusLabel.stringValue = [NSString stringWithFormat:@"HiDPI  %ld%% を適用中です。\nウインドウを閉じても動作を続けます。DockやLaunchpadから再表示できます。", self.engine.percent];
     [self updateControls];
 }
 - (void)restore:(id)sender {
@@ -284,6 +308,14 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
 - (void)runUITest {
     // 通常のアプリと同じウインドウ・コントロールを動かす。画面設定は変更しない。
     BOOL pass = YES;
+    pass &= self.statusItem != nil && self.menuBarIconCheckbox.state == NSControlStateValueOn;
+    [self.menuBarIconCheckbox performClick:nil];
+    pass &= self.statusItem == nil && self.menuBarIconCheckbox.state == NSControlStateValueOff;
+    [self.window performClose:nil];
+    [self applicationShouldHandleReopen:NSApp hasVisibleWindows:NO];
+    pass &= self.window.visible && self.statusItem == nil;
+    [self.menuBarIconCheckbox performClick:nil];
+    pass &= self.statusItem != nil && self.menuBarIconCheckbox.state == NSControlStateValueOn;
     pass &= [self.iconName isEqual:@"IconBlue"];
     [self.iconMenu performActionForItemAtIndex:1];
     pass &= [self.iconName isEqual:@"IconGreen"] && [self.iconMenu itemAtIndex:1].state == NSControlStateValueOn;
@@ -318,7 +350,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         }];
         pass &= [[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:path atomically:YES];
     }
-    printf("UI: 倍率操作、未接続時の制御、アイコン切り替え、ウインドウ描画 %s\n", pass ? "PASS" : "FAIL");
+    printf("UI: 倍率操作、未接続時の制御、アイコン切り替え、メニューバーの表示切り替え・再表示、ウインドウ描画 %s\n", pass ? "PASS" : "FAIL");
     USExitCode = pass ? 0 : 1;
     fflush(stdout); [NSApp terminate:nil];
 }
