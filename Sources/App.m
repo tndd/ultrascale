@@ -1,6 +1,18 @@
 #import "DisplayEngine.h"
 
 static int USExitCode = 0;
+// 実クリックの検証中もAppKitへイベントを渡す。NSRunLoopの待機だけでは
+// マウスイベントが未処理のまま残り、正常な入力まで失敗と判定してしまう。
+static void USRunApplicationFor(NSTimeInterval seconds) {
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
+    while (deadline.timeIntervalSinceNow > 0) {
+        NSEvent *event = [NSApp nextEventMatchingMask:NSEventMaskAny
+            untilDate:[NSDate dateWithTimeIntervalSinceNow:MIN(0.02, deadline.timeIntervalSinceNow)]
+            inMode:NSDefaultRunLoopMode dequeue:YES];
+        if (event) [NSApp sendEvent:event];
+        [NSApp updateWindows];
+    }
+}
 // AppKitが捕捉した例外も診断できるようにし、テストでは成功扱いにしない。
 @interface USApplication : NSApplication
 @end
@@ -113,10 +125,11 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     self.engine = [USDisplayEngine new];
     BOOL streamTest = [NSProcessInfo.processInfo.arguments containsObject:@"--stream-test"];
     self.uiTest = streamTest || [NSProcessInfo.processInfo.arguments containsObject:@"--ui-test"];
+    if (self.uiTest && !streamTest) [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
     [NSUserDefaults.standardUserDefaults registerDefaults:@{@"showMenuBarIcon":@YES}];
     [self createMenu];
     NSString *savedIcon = [NSUserDefaults.standardUserDefaults stringForKey:@"iconName"];
-    [self useIconNamed:self.uiTest ? @"IconBlue" : (savedIcon ?: @"IconBlue")];
+    [self useIconNamed:self.uiTest ? @"IconBlue" : (savedIcon ?: @"IconGreen")];
     [self createWindow];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(displaysChanged:)
         name:NSApplicationDidChangeScreenParametersNotification object:nil];
@@ -125,7 +138,10 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     self.timer = [NSTimer timerWithTimeInterval:0.5 target:self selector:@selector(tick) userInfo:nil repeats:YES];
     [NSRunLoop.mainRunLoop addTimer:self.timer forMode:NSRunLoopCommonModes];
     [self refresh]; [self show:nil];
-    if (self.uiTest) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 2), dispatch_get_main_queue(), ^{ if (streamTest) [self runStreamTest]; else [self runUITest]; });
+    // 同期的な待機中もメインキューへ届く仮想画面・映像の完了通知を処理する。
+    // メインキューのブロック内から開始すると、そのキューを待つ処理が進まない。
+    if (self.uiTest) [self performSelector:streamTest ? @selector(runStreamTest) : @selector(runUITest)
+        withObject:nil afterDelay:0.5];
 }
 - (void)createMenu {
     NSMenu *menu = [NSMenu new];
@@ -429,6 +445,8 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     NSArray *args = NSProcessInfo.processInfo.arguments;
     NSUInteger index = [args indexOfObject:@"--stream-test"];
     NSString *directory = args.count > index+1 ? args[index+1] : nil;
+    BOOL browserComparison = [args containsObject:@"--browser"];
+    if (browserComparison) { self.slider.integerValue = 120; [self scaleChanged:nil]; }
     NSError *error = nil; BOOL pass = directory != nil;
     NSWindow *sample = nil;
     self.qualityCheckbox.state = NSControlStateValueOn; [self qualityChanged:nil];
@@ -442,6 +460,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         for (NSScreen *screen in NSScreen.screens) if ([screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue] == self.engine.virtualID) source = screen;
         if (!source) pass = NO;
         else {
+            if (!browserComparison) {
             NSRect frame = NSMakeRect(source.frame.origin.x + 200, source.frame.origin.y + 220, 900, 500);
             sample = [[NSWindow alloc] initWithContentRect:frame styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
             sample.releasedWhenClosed = NO; sample.title = @"UltraScale 画質と入力の実機検証";
@@ -449,7 +468,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
             sample.contentView = [[USFilterPattern alloc] initWithFrame:NSMakeRect(0,0,900,500)];
             NSButton *button = USButton(sample.contentView,@"クリックを試す",NSMakeRect(25,100,240,40),self,@selector(testPatternClicked:));
             [sample makeKeyAndOrderFront:nil];
-            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:1]];
+            USRunApplicationFor(1);
             CGEventRef original = CGEventCreate(NULL); CGPoint originalPoint = CGEventGetLocation(original); CFRelease(original);
             NSPoint location = [sample convertPointToScreen:NSMakePoint(NSMidX(button.frame),NSMidY(button.frame))];
             CGFloat mainTop = 0;
@@ -459,19 +478,20 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
             for (NSNumber *type in @[@(kCGEventLeftMouseDown),@(kCGEventLeftMouseUp)]) {
                 CGEventRef event = CGEventCreateMouseEvent(NULL,type.unsignedIntValue,point,kCGMouseButtonLeft); CGEventPost(kCGHIDEventTap,event); CFRelease(event);
             }
-            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+            USRunApplicationFor(0.5);
             CGWarpMouseCursorPosition(originalPoint); pass &= self.testClickReceived;
+            } else USRunApplicationFor(2);
             [NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:&error];
             for (NSInteger filter=0;filter<3;filter++) {
                 self.engine.filter = filter; self.engine.sharpness = 0;
-                [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.3]];
+                USRunApplicationFor(0.3);
                 pass &= [self.engine writeFilteredSnapshotTo:[directory stringByAppendingPathComponent:[NSString stringWithFormat:@"stream-%ld.png",filter]] error:&error];
                 pass &= self.engine.isHealthy;
             }
             self.engine.filter = 2; self.engine.sharpness = 0.25;
-            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.3]];
+            USRunApplicationFor(0.3);
             pass &= [self.engine writeFilteredSnapshotTo:[directory stringByAppendingPathComponent:@"stream-sharp25.png"] error:&error];
-            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:16]];
+            USRunApplicationFor(16);
             BOOL presented = NO;
             NSArray *windows = CFBridgingRelease(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
             for (NSDictionary *window in windows) {
@@ -481,7 +501,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
                     CGRectEqualToRect(bounds, CGDisplayBounds(self.engine.target))) presented = YES;
             }
             pass &= self.engine.capturedFrames > 0 && self.engine.isHealthy && presented;
-            printf("実機ストリーム: frames=%lu input=%s presentation=%s\n",(unsigned long)self.engine.capturedFrames,self.testClickReceived ? "PASS" : "FAIL",presented ? "PASS" : "FAIL");
+            printf("実機ストリーム: frames=%lu input=%s presentation=%s\n",(unsigned long)self.engine.capturedFrames,browserComparison ? "未検証（ブラウザ比較）" : (self.testClickReceived ? "PASS" : "FAIL"),presented ? "PASS" : "FAIL");
         }
     }
     if (error) fprintf(stderr,"%s\n",error.localizedDescription.UTF8String);

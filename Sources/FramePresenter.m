@@ -3,6 +3,7 @@
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 #import <MetalKit/MetalKit.h>
 #import <CoreMedia/CoreMedia.h>
+#import <ImageIO/ImageIO.h>
 
 @interface USPresentationWindow : NSWindow
 @end
@@ -155,11 +156,22 @@ static BOOL USCaptureFailure(NSError **error, NSString *message) {
         sourceSize:MTLSizeMake(source.width,source.height,1) toTexture:copy destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
     [blit endEncoding]; [command commit]; [command waitUntilCompleted];
     if (command.error) { if (error) *error = command.error; return NO; }
-    NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:(NSInteger)source.width pixelsHigh:(NSInteger)source.height
-        bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace
-        bitmapFormat:NSBitmapFormatAlphaFirst | NSBitmapFormatThirtyTwoBitLittleEndian bytesPerRow:source.width * 4 bitsPerPixel:32];
-    [copy getBytes:bitmap.bitmapData bytesPerRow:source.width * 4 fromRegion:MTLRegionMake2D(0,0,source.width,source.height) mipmapLevel:0];
-    return [[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:path options:NSDataWritingAtomic error:error];
+    NSMutableData *data = [NSMutableData dataWithLength:source.width * source.height * 4];
+    [copy getBytes:data.mutableBytes bytesPerRow:source.width * 4 fromRegion:MTLRegionMake2D(0,0,source.width,source.height) mipmapLevel:0];
+    // MetalのBGRAを明示して読み込む。NSBitmapImageRepの並びと混同すると
+    // 青・アルファを誤解釈したPNGになり、表示中の画質を検証できない。
+    CGDataProviderRef provider = CGDataProviderCreateWithCFData((__bridge CFDataRef)data);
+    CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGImageRef image = CGImageCreate(source.width, source.height, 8, 32, source.width * 4, space,
+        kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst, provider, NULL, NO, kCGRenderingIntentDefault);
+    CGDataProviderRelease(provider); CGColorSpaceRelease(space);
+    if (!image) return USCaptureFailure(error, @"描画画像のBGRA変換に失敗しました。");
+    CGImageDestinationRef destination = CGImageDestinationCreateWithURL((__bridge CFURLRef)[NSURL fileURLWithPath:path], CFSTR("public.png"), 1, NULL);
+    if (!destination) { CGImageRelease(image); return USCaptureFailure(error, @"PNGの保存先を開けませんでした。"); }
+    CGImageDestinationAddImage(destination, image, NULL);
+    BOOL saved = CGImageDestinationFinalize(destination);
+    CFRelease(destination); CGImageRelease(image);
+    return saved || USCaptureFailure(error, @"PNGの保存に失敗しました。");
 }
 - (void)stop {
     self.stopped = YES;

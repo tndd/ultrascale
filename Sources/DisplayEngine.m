@@ -31,6 +31,15 @@ static BOOL USFail(NSError **error, NSString *message) {
     if (error) *error = USError(message);
     return NO;
 }
+// 適用操作では状態の確認だけを行う。許可要求で既存表示や操作を中断しない。
+static BOOL USCheckFilterPermissions(NSError **error) {
+    BOOL capture = CGPreflightScreenCaptureAccess(), accessibility = AXIsProcessTrusted();
+    if (!capture || !accessibility) {
+        NSString *missing = !capture && !accessibility ? @"画面収録・アクセシビリティ" : (!capture ? @"画面収録" : @"アクセシビリティ");
+        return USFail(error, [NSString stringWithFormat:@"画質調整の%@が未許可です。通常表示は継続します。許可を変更する場合はシステム設定でUltraScaleを確認してください。", missing]);
+    }
+    return YES;
+}
 USSize USLogicalSize(NSInteger percent) {
     double scale = MAX(100, MIN(200, percent)) / 100.0;
     return (USSize){(size_t)llround(3440 / scale), (size_t)llround(1440 / scale)};
@@ -196,17 +205,7 @@ static void USMoveWindows(NSArray<NSDictionary *> *windows, CGRect from, CGRect 
     BOOL supported = NO;
     for (USDisplay *display in self.displays) if (display.identifier == target && display.supported) supported = YES;
     if (!supported) return USFail(error, @"3440 × 1440に対応する外部ディスプレイが必要です。");
-    if (self.useFilters) {
-        BOOL capture = CGPreflightScreenCaptureAccess(), accessibility = AXIsProcessTrusted();
-        if (!accessibility) AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef)@{(__bridge NSString *)kAXTrustedCheckOptionPrompt:@YES});
-        if (!capture) CGRequestScreenCaptureAccess();
-        capture = CGPreflightScreenCaptureAccess(); accessibility = AXIsProcessTrusted();
-        if (!capture || !accessibility) {
-            NSString *missing = !capture && !accessibility ? @"画面収録・アクセシビリティ" : (!capture ? @"画面収録" : @"アクセシビリティ");
-            NSLog(@"画質調整の権限: 画面収録=%d アクセシビリティ=%d", capture, accessibility);
-            return USFail(error, [NSString stringWithFormat:@"画質調整の%@が未許可です。システム設定で /Applications/UltraScale.app を許可して再起動してください。", missing]);
-        }
-    }
+    if (self.useFilters && !USCheckFilterPermissions(error)) return NO;
     if (self.active && ![self restore:error]) return NO;
     for (NSNumber *number in USOnlineDisplays()) {
         if (CGDisplayMirrorsDisplay(target) || CGDisplayMirrorsDisplay(number.unsignedIntValue) == target)

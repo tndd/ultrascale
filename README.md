@@ -69,6 +69,14 @@ open build/UltraScale.app
 
 ビルド結果は標準で、リポジトリ内の `build/UltraScale.app` に出力されます。`./build.sh /任意の出力先/UltraScale.app` で変更できます。
 
+実行中のアプリへ直接ビルドすることは禁止しています。実行中のコードとディスク上の署名が異なると、設定画面で許可済みでも権限が認識されないためです。更新は`build/`へビルドし、UltraScaleを終了してからアプリを置き換え、Finderまたは`open /Applications/UltraScale.app`で起動し直してください。
+
+標準のアドホック署名では更新によりアプリの識別情報が変わるため、画面収録・アクセシビリティの再許可が必要になる場合があります。設定画面の「終了して再度開く」まで完了してください。手元に有効なコード署名証明書がある場合は、同じ証明書を継続使用するため`ULTRASCALE_SIGNING_IDENTITY`にその名前を指定できます。証明書の作成・取得はこのスクリプトでは行いません。
+
+```sh
+ULTRASCALE_SIGNING_IDENTITY='Developer ID Application: 証明書の名前' ./build.sh
+```
+
 実際のWindowServer APIで仮想画面・ミラー・復元を検証する場合は次を実行します。一時的な仮想画面を作成するため、テスト中はデスクトップ配置が変わる場合があります。
 
 ```bash
