@@ -32,6 +32,7 @@ for color in Blue Green; do
   done
   iconutil -c icns "$iconset" -o "$app/Contents/Resources/Icon${color}.icns"
 done
+cp "$app/Contents/Resources/IconGreen.icns" "$app/Contents/Resources/AppIcon.icns"
 codesign --force --sign "${ULTRASCALE_SIGNING_IDENTITY:--}" "$app"
 if [[ "${ULTRASCALE_SIGNING_IDENTITY:--}" == '-' ]]; then
   printf 'アドホック署名: 更新で権限の再許可が必要になる場合があります。置き換え後は必ずアプリを起動し直してください。\n' >&2

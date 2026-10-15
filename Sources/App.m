@@ -129,7 +129,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     [NSUserDefaults.standardUserDefaults registerDefaults:@{@"showMenuBarIcon":@YES}];
     [self createMenu];
     NSString *savedIcon = [NSUserDefaults.standardUserDefaults stringForKey:@"iconName"];
-    [self useIconNamed:self.uiTest ? @"IconBlue" : (savedIcon ?: @"IconGreen")];
+    [self useIconNamed:self.uiTest ? @"IconGreen" : (savedIcon ?: @"IconGreen")];
     [self createWindow];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(displaysChanged:)
         name:NSApplicationDidChangeScreenParametersNotification object:nil];
@@ -150,7 +150,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     self.iconMenu = [NSMenu new];
     NSMenuItem *iconChoice = [app.submenu addItemWithTitle:@"Dockアイコン" action:NULL keyEquivalent:@""];
     iconChoice.submenu = self.iconMenu;
-    for (NSArray *choice in @[@[@"青（標準）", @"IconBlue"], @[@"緑（予備）", @"IconGreen"]]) {
+    for (NSArray *choice in @[@[@"青（予備）", @"IconBlue"], @[@"緑（標準）", @"IconGreen"]]) {
         NSMenuItem *item = [self.iconMenu addItemWithTitle:choice[0] action:@selector(changeIcon:) keyEquivalent:@""];
         item.target = self; item.representedObject = choice[1];
     }
@@ -188,7 +188,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     if (!self.uiTest) [NSUserDefaults.standardUserDefaults setBool:visible forKey:@"showMenuBarIcon"];
 }
 - (BOOL)useIconNamed:(NSString *)name {
-    if (![@[@"IconBlue", @"IconGreen"] containsObject:name]) name = @"IconBlue";
+    if (![@[@"IconBlue", @"IconGreen"] containsObject:name]) name = @"IconGreen";
     NSString *path = [NSBundle.mainBundle pathForResource:name ofType:@"icns"];
     NSImage *icon = path ? [[NSImage alloc] initWithContentsOfFile:path] : nil;
     if (!icon) return NO;
@@ -520,12 +520,12 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     pass &= self.window.visible && self.statusItem == nil;
     [self.menuBarIconCheckbox performClick:nil];
     pass &= self.statusItem != nil && self.menuBarIconCheckbox.state == NSControlStateValueOn;
-    pass &= [self.iconName isEqual:@"IconBlue"];
-    [self.iconMenu performActionForItemAtIndex:1];
-    pass &= [self.iconName isEqual:@"IconGreen"] && [self.iconMenu itemAtIndex:1].state == NSControlStateValueOn;
+    pass &= [self.iconName isEqual:@"IconGreen"];
     [self.iconMenu performActionForItemAtIndex:0];
     pass &= [self.iconName isEqual:@"IconBlue"] && [self.iconMenu itemAtIndex:0].state == NSControlStateValueOn;
-    pass &= [self useIconNamed:@"invalid"] && [self.iconName isEqual:@"IconBlue"];
+    [self.iconMenu performActionForItemAtIndex:1];
+    pass &= [self.iconName isEqual:@"IconGreen"] && [self.iconMenu itemAtIndex:1].state == NSControlStateValueOn;
+    pass &= [self useIconNamed:@"invalid"] && [self.iconName isEqual:@"IconGreen"];
     for (NSNumber *number in @[@100, @125, @137, @200]) {
         self.slider.integerValue = number.integerValue;
         [self.slider sendAction:self.slider.action to:self.slider.target];
