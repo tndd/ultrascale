@@ -19,3 +19,5 @@ xcrun clang -fobjc-arc -Wall -Wextra -Werror -framework Cocoa scripts/prepare_ic
 通常の `./build.sh` は透過素材から16〜1024pxのアイコンを生成し、青・緑両方の `.icns` をアプリへ収録します。生成される `.iconset` と `.icns` はGit管理外です。
 
 標準のFinderアイコンは緑（バーなし）です。起動中のDockアイコンは「UltraScale → Dockアイコン」から青・緑を切り替えられ、次回起動時も選択を維持します。
+
+Finder・Spotlight・ランチャー用の標準アイコンは `AppIcon.icns` として収録します。以前の青い標準アイコンのキャッシュを引き継がないよう、リソース名とバンドルの版を更新しています。

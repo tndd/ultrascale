@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")"
-app="${1:-build/UltraScale.app}"
+app="${1:-build/Applications.noindex/UltraScale.app}"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" build
 xcrun clang -fobjc-arc -O2 -Wall -Wextra -Werror -mmacosx-version-min=14.0 \
   -framework Cocoa -framework CoreGraphics Sources/DisplayEngine.m Sources/App.m \
@@ -17,5 +17,6 @@ for color in Blue Green; do
   done
   iconutil -c icns "$iconset" -o "$app/Contents/Resources/Icon${color}.icns"
 done
+cp "$app/Contents/Resources/IconGreen.icns" "$app/Contents/Resources/AppIcon.icns"
 codesign --force --sign - "$app"
 printf 'ビルド完了: %s\n' "$app"
