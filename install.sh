@@ -6,6 +6,12 @@ source_app="$PWD/build/Applications.noindex/UltraScale.app"
 target_app=/Applications/UltraScale.app
 codesign --verify --strict "$source_app"
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$source_app/Contents/Info.plist")" = local.codex.UltraScale
+if [[ $# == 0 ]]; then
+  ./scripts/check-update-identity.sh "$source_app" "$target_app"
+elif [[ $# != 1 || "$1" != --replace-signing-identity ]]; then
+  printf '使い方: ./install.sh [--replace-signing-identity]\n' >&2
+  exit 2
+fi
 running() { ps -ax -o comm= | /usr/bin/awk '$0 == "/Applications/UltraScale.app/Contents/MacOS/UltraScale" {found=1} END {exit !found}'; }
 if running; then
   osascript -e 'tell application "/Applications/UltraScale.app" to quit'
