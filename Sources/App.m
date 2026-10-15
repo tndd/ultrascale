@@ -339,8 +339,8 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     NSError *error = nil;
     BOOL ok = [self.engine applyTo:[self.displayPicker.selectedItem.representedObject unsignedIntValue]
         percent:self.slider.integerValue error:&error];
-    self.busy = NO;
     if (ok) {
+        self.busy = NO;
         self.previousTarget = previousTarget; self.previousPercent = previousPercent; self.previousUseFilters = previousUseFilters;
         self.undoAvailable = YES; self.deadline = NSProcessInfo.processInfo.systemUptime + 15;
         [self updateAppliedStatus];
@@ -359,6 +359,7 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
         [self qualityChanged:nil];
         if (!self.engine.active) { self.undoAvailable = NO; self.undoLabel.stringValue = @""; }
         if (self.engine.active) { self.slider.integerValue = self.engine.percent; [self scaleChanged:nil]; }
+        self.busy = NO;
         [self refresh];
         self.statusLabel.stringValue = self.engine.active ? [failure stringByAppendingFormat:@"\n%@ %ld%% は動作中です。", self.engine.activeUsesFilters ? @"画質調整" : @"通常HiDPI", self.engine.percent] : failure;
     }
@@ -431,8 +432,10 @@ static NSButton *USButton(NSView *parent, NSString *title, NSRect frame, id targ
     NSError *error = nil; BOOL pass = directory != nil;
     NSWindow *sample = nil;
     self.qualityCheckbox.state = NSControlStateValueOn; [self qualityChanged:nil];
+    self.busy = YES;
     pass &= [self.engine applyTo:[self.displayPicker.selectedItem.representedObject unsignedIntValue]
         percent:self.slider.integerValue error:&error];
+    self.busy = NO;
     pass &= self.engine.activeUsesFilters && self.engine.isHealthy;
     if (pass) {
         NSScreen *source = nil;

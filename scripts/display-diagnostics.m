@@ -24,6 +24,17 @@ int main(void) { @autoreleasepool {
     if(modes && CFGetTypeID(modes)==CFArrayGetTypeID()) for(NSDictionary *m in (__bridge NSArray*)modes) if([m[@"ID"] unsignedIntValue]==color)
      printf("current Depth=%s PixelEncoding=%s DynamicRange=%s Colorimetry=%s\n",[m[@"Depth"] description].UTF8String,[m[@"PixelEncoding"] description].UTF8String,[m[@"DynamicRange"] description].UTF8String,[m[@"Colorimetry"] description].UTF8String);
     if(modes)CFRelease(modes);
+    NSArray *timings=CFBridgingRelease(IORegistryEntryCreateCFProperty(service,CFSTR("TimingElements"),kCFAllocatorDefault,0));
+    for(NSDictionary *t in timings) if([t[@"ID"] unsignedIntValue]==timing) {
+     printf("timing Active=%dx%d overscan=%d unsafeCurrentColor=%d\n",
+      [t[@"HorizontalAttributes"][@"Active"] intValue],[t[@"VerticalAttributes"][@"Active"] intValue],
+      [t[@"IsOverscanned"] boolValue],[t[@"UnsafeColorElementIDs"] containsObject:@(color)]);
+     // EDIDのNativeFormatと実際の信号タイミングは一致するとは限らない。
+     // enumの意味は別APIから推測せず、ドライバの登録値をそのまま出力する。
+     for(NSDictionary *c in t[@"ColorModes"]) if(![c[@"IsVirtual"] boolValue] && ![t[@"UnsafeColorElementIDs"] containsObject:c[@"ID"]])
+      printf("candidate ID=%u Depth=%d PixelEncoding=%d DynamicRange=%d\n",
+       [c[@"ID"] unsignedIntValue],[c[@"Depth"] intValue],[c[@"PixelEncoding"] intValue],[c[@"DynamicRange"] intValue]);
+    }
    }
    CFRelease(attrs);
   }

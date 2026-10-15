@@ -3,13 +3,16 @@
 #import "../Sources/App.m"
 #undef main
 @interface USRecoveryEngine : USDisplayEngine
-@property BOOL running, loseCurrentDisplay, failRecovery;
+@property BOOL running, loseCurrentDisplay, failRecovery, applying;
+@property(copy) void (^duringRecovery)(void);
+@property NSInteger restores;
 @property NSInteger calls, appliedPercent;
 @end
 @implementation USRecoveryEngine
 - (BOOL)active { return self.running; }
 - (BOOL)activeUsesFilters { return NO; }
-- (BOOL)isHealthy { return self.running; }
+- (BOOL)isHealthy { return self.running && !self.applying; }
+- (BOOL)restore:(NSError **)error { (void)error; self.restores++; self.running=NO; return YES; }
 - (CGDirectDisplayID)target { return self.running ? 42 : 0; }
 - (NSInteger)percent { return self.running ? self.appliedPercent : 0; }
 - (NSArray<USDisplay *> *)displays {
@@ -22,7 +25,9 @@
         if (error) *error = [NSError errorWithDomain:@"試験" code:1 userInfo:@{NSLocalizedDescriptionKey:@"画質調整の失敗を再現"}];
         return NO;
     }
-    self.running = YES; self.appliedPercent = percent; return YES;
+    self.running = YES; self.appliedPercent = percent; self.applying=YES;
+    if(self.duringRecovery)self.duringRecovery();
+    self.applying=NO; return self.running;
 }
 @end
 static int failures;
@@ -38,7 +43,9 @@ int main(void) { @autoreleasepool {
         app.slider.integerValue = 150;
         app.qualityCheckbox.state = NSControlStateValueOn; [app qualityChanged:nil];
         app.undoAvailable = YES; app.deadline = NSProcessInfo.processInfo.systemUptime+10;
+        __weak USApp *weakApp=app; engine.duringRecovery=^{ [weakApp tick]; };
         [app apply:nil];
+        check(engine.restores==0, "通常HiDPIへ復旧中の監視処理が表示を解除しない");
         if(scenario==0) check(engine.running && engine.calls==2 && engine.percent==150, "初回の画質調整失敗でも通常HiDPIが動作する");
         if(scenario==1) check(engine.running && engine.calls==1 && engine.percent==125 && app.undoAvailable, "許可不足で既存表示を壊さず取り消し期限を保持する");
         if(scenario==2) check(engine.running && engine.calls==2 && engine.percent==125 && app.slider.integerValue==125, "描画開始失敗で失った変更前の倍率を通常HiDPIで復旧する");
