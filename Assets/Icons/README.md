@@ -1,7 +1,7 @@
 # アプリアイコン
 
-- `OriginalBlue.png`: 採用された青いスクリーン＋角丸スライダーの添付原画。
-- `OriginalGreen.png`: 予備として指定された緑のスクリーンの添付原画。スライダーはありません。
+- `OriginalBlue.png`: 予備の青いスクリーン＋角丸スライダーの添付原画。
+- `OriginalGreen.png`: 標準として採用された緑のスクリーンの添付原画。スライダーはありません。
 - `IconBlue.png` / `IconGreen.png`: 原画をコードで切り抜いた1024×1024の透過素材。
 
 4枚とも、アプリの制作・ビルドで使うソース素材としてGit管理します。テスト出力ではありません。原画の保存と、ビルド時に確実に同じアイコンを再現するため、保存期間の限られるCI artifactでの保管では足りません。
@@ -18,4 +18,4 @@ xcrun clang -fobjc-arc -Wall -Wextra -Werror -framework Cocoa scripts/prepare_ic
 
 通常の `./build.sh` は透過素材から16〜1024pxのアイコンを生成し、青・緑両方の `.icns` をアプリへ収録します。生成される `.iconset` と `.icns` はGit管理外です。
 
-標準のFinderアイコンは青です。起動中のDockアイコンは「UltraScale → Dockアイコン」から青・緑を切り替えられ、次回起動時も選択を維持します。
+標準のFinderアイコンは緑（バーなし）です。起動中のDockアイコンは「UltraScale → Dockアイコン」から青・緑を切り替えられ、次回起動時も選択を維持します。
