@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UltraScale 画質検証</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101722;color:#e4ecf5;font:15px/1.7 -apple-system,BlinkMacSystemFont,sans-serif}main{max-width:1440px;margin:auto;padding:32px 24px}h1{font-size:28px;margin:0}h2{font-size:19px}p{max-width:1000px;color:#b8c8db}.badges{display:flex;gap:12px;flex-wrap:wrap;margin:20px 0}.badge{border:1px solid #526479;border-radius:7px;padding:7px 12px}.pass{color:#7de3bc}.fail{color:#ffacac}label{display:flex;align-items:center;gap:12px}select,button{font:inherit;background:#233249;color:inherit;border:1px solid #637893;padding:7px 12px;border-radius:6px}button{cursor:pointer}button[aria-pressed=true]{background:#1855a0}.toolbar{display:flex;gap:12px;flex-wrap:wrap;margin:20px 0}.panels{display:grid;grid-template-columns:1fr 1fr;gap:20px}.panel{min-width:0}.viewport{margin-top:12px;overflow:auto;height:430px;border:1px solid #526479;background:#fff}.viewport img{display:block;max-width:none;image-rendering:pixelated}.note{font-size:13px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:10px;border-bottom:1px solid #34465c}td:not(:first-child){font-variant-numeric:tabular-nums}a{color:#8fc4ff}details{margin-top:20px}summary{cursor:pointer}code{overflow-wrap:anywhere}li{margin:5px 0}@media(max-width:760px){.panels{grid-template-columns:1fr}main{padding:20px 12px}.table-wrap{overflow:auto}}
+</style><main>
+<h1>UltraScale 画質検証</h1>
+<p>外部モニタなしで、アプリと同じ画像処理の出力を比べます。「処理が効いた」と「読みやすくなった」は別の判定です。</p>
+<div class="badges"><span id="processing" class="badge"></span><span class="badge">見やすさ：未判定</span><span class="badge">合成・実モニタ：未検証</span></div>
+<p id="environment"></p>
+<div class="toolbar"><button id="one" aria-pressed="true">1倍表示</button><button id="four" aria-pressed="false">4倍で画素を確認</button><button id="swap">左右を入れ替える</button></div>
+<p class="note">画像1画素を1 CSS pxで表示します。4倍表示は補間しません。ブラウザのズーム、Retina倍率、OSの縮小は別途影響するため、実モニタの1画素を保証する表示ではありません。左右のスクロールは連動します。</p>
+<div class="panels">
+ <section class="panel"><label>A <select id="left" aria-label="比較A"></select></label><div class="viewport" id="viewA"><img id="imageA" alt="比較Aの文字と細線"></div><a id="fullA">全画面のPNG</a></section>
+ <section class="panel"><label>B <select id="right" aria-label="比較B"></select></label><div class="viewport" id="viewB"><img id="imageB" alt="比較Bの文字と細線"></div><a id="fullB">全画面のPNG</a></section>
+</div>
+<h2>輪郭の測定値</h2>
+<p class="note">32→224の灰色境界を4位置で測定。遷移幅は10〜90%の明るさに移る幅の平均、縁取りは元の明暗範囲からはみ出た量の最大です。幅が狭くても縁取りが増えれば改善とは限りません。これらは文字認識率や画質の総合点ではありません。</p>
+<div class="table-wrap"><table><thead><tr><th>処理</th><th>遷移幅（px）</th><th>縁取り（8bit）</th><th>灰色のRGB差</th><th>バイリニアとの画素差平均</th></tr></thead><tbody id="metrics"></tbody></table></div>
+<details open><summary>実行した検証</summary><ul id="checks"></ul></details>
+<details><summary>再現情報・未検証範囲</summary><p id="identity"></p><p>画面収録、WindowServerの合成フィルタ、GPU画像の実画面への提示、入力、映像ケーブル、パネルのサブピクセル配列は、この試験では確認していません。実機の映像ではなく、同じ処理関数から生成した検証用画像です。</p><a href="report.json">数値とSHA-256を含むJSON</a> · <a href="source.png">2倍描画の入力PNG</a></details>
+</main><script>
+const report=__REPORT_JSON__;
+const byId=id=>document.getElementById(id);
+let zoom=1;
+for(const key of ['left','right'])for(const v of report.variants){const o=document.createElement('option');o.value=v.id;o.textContent=v.name;byId(key).append(o)}
+byId('right').value='sharp25';
+function update(){for(const [side,suffix] of [['left','A'],['right','B']]){const id=byId(side).value;const img=byId('image'+suffix);img.src=id+'.png';img.style.width=(report.crop.width*zoom)+'px';img.style.height=(report.crop.height*zoom)+'px';byId('full'+suffix).href=id+'-full.png'}for(const id of ['viewA','viewB'])byId(id).scrollTo(0,0)}
+for(const key of ['left','right'])byId(key).addEventListener('change',update);
+for(const [id,z] of [['one',1],['four',4]])byId(id).onclick=()=>{zoom=z;byId('one').setAttribute('aria-pressed',z===1);byId('four').setAttribute('aria-pressed',z===4);update()};
+byId('swap').onclick=()=>{const a=byId('left').value;byId('left').value=byId('right').value;byId('right').value=a;update()};
+for(const [a,b] of [['viewA','viewB'],['viewB','viewA']])byId(a).onscroll=()=>{if(byId(a).scrollLeft!==byId(b).scrollLeft)byId(b).scrollLeft=byId(a).scrollLeft;if(byId(a).scrollTop!==byId(b).scrollTop)byId(b).scrollTop=byId(a).scrollTop};
+byId('processing').textContent='処理検証：'+(report.processing_passed?'PASS':'FAIL');byId('processing').classList.add(report.processing_passed?'pass':'fail');
+byId('environment').textContent=report.percent+'%相当 ／ 入力 '+report.source_width+' × '+report.source_height+' → 出力 3440 × 1440 ／ '+report.gpu;
+for(const v of report.variants){const tr=document.createElement('tr');for(const value of [v.name,v.edge_width_px===null?'測定不能':v.edge_width_px.toFixed(3),v.overshoot_8bit,v.gray_channel_spread,v.difference_from_linear.toFixed(3)]){const td=document.createElement('td');td.textContent=value;tr.append(td)}byId('metrics').append(tr)}
+for(const c of report.checks){const li=document.createElement('li');li.textContent=(c.passed?'PASS: ':'FAIL: ')+c.name;li.className=c.passed?'pass':'fail';byId('checks').append(li)}
+byId('identity').textContent=report.os+' ／ 入力SHA-256: '+report.input_sha256;
+update();
+</script></html>

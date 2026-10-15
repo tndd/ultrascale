@@ -1,0 +1,6 @@
+{
+  "name": "ultrascale-validation",
+  "private": true,
+  "scripts": { "test:report": "playwright test" },
+  "devDependencies": { "playwright": "1.62.1" }
+}
