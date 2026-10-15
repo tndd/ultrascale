@@ -4,7 +4,7 @@
 
 ## 使い方
 
-1. 下記の手順でビルドし、`build/UltraScale.app` を開きます。必要ならFinderで「アプリケーション」へコピーできます。
+1. 下記の手順でビルドし、`build/Applications.noindex/UltraScale.app` を開きます。必要ならFinderで「アプリケーション」へコピーできます。
 2. 3440 × 1440の外部モニタを接続し、対象を選びます。
 3. スライダーで倍率を選び、「HiDPIを適用」を押します。
 4. 適用した設定はそのまま維持されます。15秒以内なら「変更前の表示に戻す」で取り消せます。直前にHiDPIを使っていた場合はその倍率へ、初めて適用した場合は通常表示へ戻ります。取り消しボタンは常に表示され、適用後15秒間だけ押せます。15秒経過すると無効になりますが、表示は変わりません。
@@ -16,7 +16,7 @@
 
 ## アイコン
 
-標準は青いスクリーン＋角丸スライダーです。予備として緑のスクリーン版もアプリに収録しています。「UltraScale → Dockアイコン → 青／緑」から起動中のDockアイコンを切り替えられ、選択は次回起動時にも引き継ぎます。Finderに表示するアプリファイルのアイコンは青のままです。
+標準は緑のスクリーン版（バーなし）です。予備として青いスクリーン＋角丸スライダーもアプリに収録しています。「UltraScale → Dockアイコン → 青／緑」から起動中のDockアイコンを切り替えられ、選択は次回起動時にも引き継ぎます。Finderに表示するアプリファイルのアイコンは緑です。
 
 原画と透過素材は `Assets/Icons/` に保存しています。輪郭の切り抜きと各サイズへの変換はコードで再現できます。手順は [アイコン素材の説明](Assets/Icons/README.md) を参照してください。
 
@@ -49,11 +49,11 @@
 git clone https://github.com/tndd/ultrascale.git
 cd ultrascale
 ./build.sh
-open build/UltraScale.app
+open build/Applications.noindex/UltraScale.app
 ./test.sh
 ```
 
-ビルド結果は標準で、リポジトリ内の `build/UltraScale.app` に出力されます。`./build.sh /任意の出力先/UltraScale.app` で変更できます。
+ビルド結果は標準で、リポジトリ内の `build/Applications.noindex/UltraScale.app` に出力されます。`./build.sh /任意の出力先/UltraScale.app` で変更できます。
 
 実際のWindowServer APIで仮想画面・ミラー・復元を検証する場合は次を実行します。一時的な仮想画面を作成するため、テスト中はデスクトップ配置が変わる場合があります。
 
@@ -72,3 +72,5 @@ open build/UltraScale.app
 仮想画面のモード引数はこのMac上で実測しました。HiDPIモードには論理解像度を、ディスプレイの最大サイズにはその2倍のピクセル数を渡しています。
 
 公開リポジトリ: [tndd/ultrascale](https://github.com/tndd/ultrascale)。アプリのビルド成果物とテスト画像はGit管理に含めません。
+
+開発用アプリはSpotlightの検索対象にならない `Applications.noindex` 内へ出力します。通常利用するコピーは `/Applications/UltraScale.app` の1つに揃え、配布・退避にはZIPを使用してください。UIテストは終了時にテスト用アプリのLaunch Services登録を解除します。
